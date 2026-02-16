@@ -1,4 +1,4 @@
-// DataForSEO API credentials and types
+// DataForSEO API - ULTIMATE FIX
 export interface DataForSeoCredentials {
   login: string;
   password: string;
@@ -41,7 +41,6 @@ export interface KeywordResult {
 
 const DATAFORSEO_API_BASE = 'https://api.dataforseo.com/v3';
 
-// ✅ Helper for POST requests
 async function makeDataForSeoRequest(
   endpoint: string,
   credentials: DataForSeoCredentials,
@@ -52,52 +51,26 @@ async function makeDataForSeoRequest(
   console.log(`📡 Calling DataForSEO: ${endpoint}`);
   console.log(`🔑 Auth (login): ${credentials.login}`);
   
-  try {
-    const response = await fetch(`${DATAFORSEO_API_BASE}${endpoint}`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${auth}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
+  const response = await fetch(`${DATAFORSEO_API_BASE}${endpoint}`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Basic ${auth}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
 
-    let responseData: any;
-    const contentType = response.headers.get('content-type');
-    
-    if (contentType && contentType.includes('application/json')) {
-      responseData = await response.json();
-    } else {
-      const textBody = await response.text();
-      console.error(`❌ Non-JSON response (${response.status}):`, textBody.substring(0, 500));
-      throw new Error(`DataForSEO returned non-JSON response (HTTP ${response.status})`);
-    }
+  const responseData = await response.json();
 
-    if (!response.ok) {
-      const errorMessage = responseData?.status_message || response.statusText;
-      const errorCode = responseData?.status_code || response.status;
-      console.error(`❌ DataForSEO HTTP Error ${response.status}:`, errorMessage);
-      throw new Error(`API Status: ${errorCode} - ${errorMessage}`);
-    }
-
-    if (responseData.status_code && responseData.status_code !== 20000) {
-      const errorMsg = responseData.status_message || 'Unknown error';
-      console.error(`❌ DataForSEO API Error: ${responseData.status_code} - ${errorMsg}`);
-      throw new Error(`API Status: ${responseData.status_code} - ${errorMsg}`);
-    }
-
-    return responseData;
-    
-  } catch (error: any) {
-    if (error.message.includes('DataForSEO') || error.message.includes('API Status')) {
-      throw error;
-    }
-    console.error(`❌ Request failed:`, error);
-    throw new Error(`Failed to connect to DataForSEO API: ${error.message}`);
+  if (!response.ok || (responseData.status_code && responseData.status_code !== 20000)) {
+    const errorMsg = responseData.status_message || 'Unknown error';
+    console.error(`❌ DataForSEO API Error: ${responseData.status_code} - ${errorMsg}`);
+    throw new Error(`API Status: ${responseData.status_code} - ${errorMsg}`);
   }
+
+  return responseData;
 }
 
-// ✅ NEW: Helper for GET requests (task_get)
 async function makeDataForSeoGetRequest(
   endpoint: string,
   credentials: DataForSeoCredentials
@@ -107,51 +80,34 @@ async function makeDataForSeoGetRequest(
   console.log(`📡 Calling DataForSEO (GET): ${endpoint}`);
   console.log(`🔑 Auth (login): ${credentials.login}`);
   
-  try {
-    const response = await fetch(`${DATAFORSEO_API_BASE}${endpoint}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Basic ${auth}`,
-        'Content-Type': 'application/json',
-      },
-    });
+  const response = await fetch(`${DATAFORSEO_API_BASE}${endpoint}`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Basic ${auth}`,
+      'Content-Type': 'application/json',
+    },
+  });
 
-    let responseData: any;
-    const contentType = response.headers.get('content-type');
-    
-    if (contentType && contentType.includes('application/json')) {
-      responseData = await response.json();
-    } else {
-      const textBody = await response.text();
-      console.error(`❌ Non-JSON response (${response.status}):`, textBody.substring(0, 500));
-      throw new Error(`DataForSEO returned non-JSON response (HTTP ${response.status})`);
-    }
+  const responseData = await response.json();
 
-    if (!response.ok) {
-      const errorMessage = responseData?.status_message || response.statusText;
-      const errorCode = responseData?.status_code || response.status;
-      console.error(`❌ DataForSEO HTTP Error ${response.status}:`, errorMessage);
-      throw new Error(`API Status: ${errorCode} - ${errorMessage}`);
-    }
-
-    if (responseData.status_code && responseData.status_code !== 20000) {
-      const errorMsg = responseData.status_message || 'Unknown error';
-      console.error(`❌ DataForSEO API Error: ${responseData.status_code} - ${errorMsg}`);
-      throw new Error(`API Status: ${responseData.status_code} - ${errorMsg}`);
-    }
-
-    return responseData;
-    
-  } catch (error: any) {
-    if (error.message.includes('DataForSEO') || error.message.includes('API Status')) {
-      throw error;
-    }
-    console.error(`❌ Request failed:`, error);
-    throw new Error(`Failed to connect to DataForSEO API: ${error.message}`);
+  if (!response.ok || (responseData.status_code && responseData.status_code !== 20000)) {
+    const errorMsg = responseData.status_message || 'Unknown error';
+    console.error(`❌ DataForSEO API Error: ${responseData.status_code} - ${errorMsg}`);
+    throw new Error(`API Status: ${responseData.status_code} - ${errorMsg}`);
   }
+
+  return responseData;
 }
 
-// Get advertisers data for a keyword
+// ✅ FIX: Estrai domain dal title (formato "NomeAzienda:PAESE")
+function extractDomainFromTitle(title: string): string {
+  if (!title) return 'Unknown';
+  // Rimuovi ":PAESE" dalla fine
+  const cleanTitle = title.replace(/:[A-Z]{2}$/, '');
+  // Converti in lowercase e aggiungi .com come fallback
+  return cleanTitle.toLowerCase().replace(/\s+/g, '') + '.com';
+}
+
 export async function getAdvertisersData(
   keyword: string,
   login: string,
@@ -159,7 +115,6 @@ export async function getAdvertisersData(
 ): Promise<AdvertiserData> {
   const credentials = { login, password };
   
-  // Post task
   const postData = [{
     keyword,
     location_code: 2380,
@@ -177,11 +132,8 @@ export async function getAdvertisersData(
   }
 
   const taskId = postResult.tasks[0].id;
-
-  // Wait for task to complete
   await new Promise(resolve => setTimeout(resolve, 5000));
 
-  // ✅ FIX: Use GET instead of POST
   const getResult = await makeDataForSeoGetRequest(
     `/serp/google/ads_advertisers/task_get/advanced/${taskId}`,
     credentials
@@ -190,21 +142,41 @@ export async function getAdvertisersData(
   const task = getResult.tasks?.[0];
   const items = task?.result?.[0]?.items || [];
 
+  console.log(`✅ Found ${items.length} items for "${keyword}"`);
+
+  // ✅ FIX: Parsing corretto per ads_advertiser e ads_domain
+  const advertisers: Advertiser[] = [];
+  
+  items.forEach((item: any) => {
+    if (item.type === 'ads_advertiser') {
+      advertisers.push({
+        domain: extractDomainFromTitle(item.title),
+        position: item.rank_absolute || advertisers.length + 1,
+        title: item.title || 'Unknown',
+        description: `Advertiser ID: ${item.advertiser_id || 'N/A'}`,
+        first_shown: item.first_shown,
+      });
+    } else if (item.type === 'ads_domain') {
+      advertisers.push({
+        domain: item.domain || 'Unknown',
+        position: item.rank_absolute || advertisers.length + 1,
+        title: item.domain || 'Unknown',
+        description: 'Domain advertiser',
+        first_shown: undefined,
+      });
+    }
+  });
+
+  console.log(`✅ Parsed ${advertisers.length} advertisers for "${keyword}"`);
+
   return {
     keyword,
-    advertisers: items.slice(0, 10).map((item: any) => ({
-      domain: item.domain || item.title || 'Unknown',
-      position: item.rank_absolute || 0,
-      title: item.title || '',
-      description: item.description || '',
-      first_shown: item.first_shown,
-    })),
-    total_count: items.length,
-    competition_level: items.length > 10 ? 1.0 : items.length / 10,
+    advertisers: advertisers.slice(0, 10),
+    total_count: advertisers.length,
+    competition_level: advertisers.length > 10 ? 1.0 : advertisers.length / 10,
   };
 }
 
-// Get keyword metrics (search volume, CPC, competition)
 export async function getKeywordMetrics(
   keywords: string[],
   login: string,
@@ -235,10 +207,11 @@ export async function getKeywordMetrics(
     });
   });
 
+  console.log(`✅ Retrieved metrics for ${metricsMap.size} keywords`);
+
   return metricsMap;
 }
 
-// Get organic SERP positions
 export async function getOrganicPositions(
   keyword: string,
   login: string,
@@ -270,10 +243,11 @@ export async function getOrganicPositions(
     }
   });
 
+  console.log(`✅ Found ${positions.length} organic positions for "${keyword}"`);
+
   return positions;
 }
 
-// Get ad traffic forecast
 export async function getAdTrafficForecast(
   keyword: string,
   login: string,
@@ -313,7 +287,6 @@ export async function getAdTrafficForecast(
   return null;
 }
 
-// Main analysis function
 export async function analyzeKeywords(
   keywords: string[],
   login: string,
@@ -329,7 +302,6 @@ export async function analyzeKeywords(
   console.log(`   Organic positions: ${includeOrganicPositions}`);
   console.log(`   Ad traffic forecast: ${includeAdTrafficForecast}`);
   
-  // Get metrics for all keywords at once
   const metricsMap = await getKeywordMetrics(keywords, login, password);
   
   const results: KeywordResult[] = [];
