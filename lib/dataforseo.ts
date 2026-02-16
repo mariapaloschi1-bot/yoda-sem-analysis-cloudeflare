@@ -41,7 +41,7 @@ export interface KeywordResult {
 
 const DATAFORSEO_API_BASE = 'https://api.dataforseo.com/v3';
 
-// ✅ BULLETPROOF: Helper function with proper error handling
+// ✅ Helper for POST requests
 async function makeDataForSeoRequest(
   endpoint: string,
   credentials: DataForSeoCredentials,
@@ -62,82 +62,92 @@ async function makeDataForSeoRequest(
       body: JSON.stringify(data),
     });
 
-    // ✅ TRY TO PARSE JSON (might fail if HTML error page)
     let responseData: any;
     const contentType = response.headers.get('content-type');
     
     if (contentType && contentType.includes('application/json')) {
       responseData = await response.json();
     } else {
-      // HTML error page or non-JSON response
       const textBody = await response.text();
       console.error(`❌ Non-JSON response (${response.status}):`, textBody.substring(0, 500));
-      
-      throw new Error(
-        `DataForSEO returned non-JSON response (HTTP ${response.status}). ` +
-        `This usually means authentication failed. ` +
-        `Check your credentials at https://app.dataforseo.com/api-access`
-      );
+      throw new Error(`DataForSEO returned non-JSON response (HTTP ${response.status})`);
     }
 
-    // ✅ CHECK HTTP STATUS
     if (!response.ok) {
       const errorMessage = responseData?.status_message || response.statusText;
       const errorCode = responseData?.status_code || response.status;
-      
       console.error(`❌ DataForSEO HTTP Error ${response.status}:`, errorMessage);
-      console.error(`Full response:`, JSON.stringify(responseData, null, 2));
-      
-      // Special message for 401
-      if (response.status === 401) {
-        throw new Error(
-          `Authentication failed (HTTP 401). ` +
-          `Please verify your DataForSEO credentials at https://app.dataforseo.com/api-access. ` +
-          `Make sure you're using the API password (not your account password).`
-        );
-      }
-      
       throw new Error(`API Status: ${errorCode} - ${errorMessage}`);
     }
 
-    // ✅ CHECK DATAFORSEO STATUS CODE (success = 20000)
     if (responseData.status_code && responseData.status_code !== 20000) {
       const errorMsg = responseData.status_message || 'Unknown error';
       console.error(`❌ DataForSEO API Error: ${responseData.status_code} - ${errorMsg}`);
-      
-      // Special handling for common errors
-      if (responseData.status_code === 40100) {
-        throw new Error(
-          `Authorization failed (40100): ${errorMsg}. ` +
-          `Your API credentials are invalid or your account doesn't have access to this endpoint. ` +
-          `Check: https://app.dataforseo.com/api-access`
-        );
-      }
-      
-      if (responseData.status_code === 40101) {
-        throw new Error(
-          `Insufficient credits (40101): ${errorMsg}. ` +
-          `Please add credits to your DataForSEO account: https://app.dataforseo.com/billing`
-        );
-      }
-      
       throw new Error(`API Status: ${responseData.status_code} - ${errorMsg}`);
     }
 
     return responseData;
     
   } catch (error: any) {
-    // Re-throw our custom errors
     if (error.message.includes('DataForSEO') || error.message.includes('API Status')) {
       throw error;
     }
-    
-    // Network or other errors
     console.error(`❌ Request failed:`, error);
-    throw new Error(
-      `Failed to connect to DataForSEO API: ${error.message}. ` +
-      `Check your internet connection and DataForSEO service status.`
-    );
+    throw new Error(`Failed to connect to DataForSEO API: ${error.message}`);
+  }
+}
+
+// ✅ NEW: Helper for GET requests (task_get)
+async function makeDataForSeoGetRequest(
+  endpoint: string,
+  credentials: DataForSeoCredentials
+) {
+  const auth = Buffer.from(`${credentials.login}:${credentials.password}`).toString('base64');
+  
+  console.log(`📡 Calling DataForSEO (GET): ${endpoint}`);
+  console.log(`🔑 Auth (login): ${credentials.login}`);
+  
+  try {
+    const response = await fetch(`${DATAFORSEO_API_BASE}${endpoint}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    let responseData: any;
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType && contentType.includes('application/json')) {
+      responseData = await response.json();
+    } else {
+      const textBody = await response.text();
+      console.error(`❌ Non-JSON response (${response.status}):`, textBody.substring(0, 500));
+      throw new Error(`DataForSEO returned non-JSON response (HTTP ${response.status})`);
+    }
+
+    if (!response.ok) {
+      const errorMessage = responseData?.status_message || response.statusText;
+      const errorCode = responseData?.status_code || response.status;
+      console.error(`❌ DataForSEO HTTP Error ${response.status}:`, errorMessage);
+      throw new Error(`API Status: ${errorCode} - ${errorMessage}`);
+    }
+
+    if (responseData.status_code && responseData.status_code !== 20000) {
+      const errorMsg = responseData.status_message || 'Unknown error';
+      console.error(`❌ DataForSEO API Error: ${responseData.status_code} - ${errorMsg}`);
+      throw new Error(`API Status: ${responseData.status_code} - ${errorMsg}`);
+    }
+
+    return responseData;
+    
+  } catch (error: any) {
+    if (error.message.includes('DataForSEO') || error.message.includes('API Status')) {
+      throw error;
+    }
+    console.error(`❌ Request failed:`, error);
+    throw new Error(`Failed to connect to DataForSEO API: ${error.message}`);
   }
 }
 
@@ -171,11 +181,10 @@ export async function getAdvertisersData(
   // Wait for task to complete
   await new Promise(resolve => setTimeout(resolve, 5000));
 
-  // Get results
-  const getResult = await makeDataForSeoRequest(
+  // ✅ FIX: Use GET instead of POST
+  const getResult = await makeDataForSeoGetRequest(
     `/serp/google/ads_advertisers/task_get/advanced/${taskId}`,
-    credentials,
-    []
+    credentials
   );
 
   const task = getResult.tasks?.[0];
@@ -184,8 +193,8 @@ export async function getAdvertisersData(
   return {
     keyword,
     advertisers: items.slice(0, 10).map((item: any) => ({
-      domain: item.domain,
-      position: item.position,
+      domain: item.domain || item.title || 'Unknown',
+      position: item.rank_absolute || 0,
       title: item.title || '',
       description: item.description || '',
       first_shown: item.first_shown,
@@ -304,7 +313,7 @@ export async function getAdTrafficForecast(
   return null;
 }
 
-// ✅ FIXED: Main analysis function with correct signature
+// Main analysis function
 export async function analyzeKeywords(
   keywords: string[],
   login: string,
